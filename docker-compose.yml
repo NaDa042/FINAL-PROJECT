@@ -1,0 +1,17 @@
+
+# Defines both containers (app + database) needed to run this project,
+# so instead of separate "docker build" + "docker run" commands for each,
+# we start everything together with a single "docker compose up".
+
+services:
+    app:
+      build: .
+      ports: 
+        - "8080:8080"
+    
+    db:
+      image: postgres:16
+      environment:
+        POSTGRES_USER: "nada"
+        POSTGRES_PASSWORD : ${DB_PASSWORD}
+        POSTGRES_DB : "logs_db"
