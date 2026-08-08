@@ -8,6 +8,8 @@ import postgres from "postgres";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { config } from "./config.js";
+import { ingestLogs } from "./logs.js";
+import { errorHandler } from "./errorHandler.js";
 
 
 
@@ -29,6 +31,12 @@ app.get("/health",health); // checks if the app is ready to accept requests
 //end get
 
 
+//post
+app.post("/logs",ingestLogs);
+
+
+
+app.use(errorHandler); //should be here after all the routes and other middlewares
 
 app.listen(PORT, () => {
   console.log(`Server is running at http://localhost:${PORT}`);
