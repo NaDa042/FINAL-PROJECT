@@ -8,9 +8,13 @@ services:
       build: .
       ports: 
         - "8080:8080"
+      env_file:
+        - .env
     
     db:
       image: postgres:16
+      ports:
+        - "5432:5432"
       environment:
         POSTGRES_USER: "nada"
         POSTGRES_PASSWORD : ${DB_PASSWORD}
