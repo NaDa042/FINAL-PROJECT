@@ -3,8 +3,9 @@
 import { NextFunction, Request,Response } from "express";
 import * as z from "zod";
 import { insertLogs } from "./db/query/addLog.js";
-import { newLog } from "./db/schema.js";
+import { levelEnum, newLog } from "./db/schema.js";
 import { getLogs } from "./db/query/getLgs.js";
+import { error400 } from "./errorHandler.js";
 
 
 export async function ingestLogs(
@@ -90,9 +91,23 @@ export async function ingestLogs(
 export async function gLogs(req:Request,res:Response,next:NextFunction){
 
     try{
-        const parms = req.query.service;
+        let {service, level} = req.query;
+        const levelSchema = z.enum(["debug", "info", "warn", "error"]);
+        if (level !== undefined){
+            const result = levelSchema.safeParse(level);
 
-        const logs = await getLogs(100,typeof parms === 'string' ? parms : undefined);
+            if (!result.success){
+                return res.status(400).json({
+                    error:"Unsupported log level",
+                });
+            }
+        }
+
+        const logs = await getLogs(
+            100,
+            typeof service === 'string' ? service : undefined,
+            typeof level === 'string'? level as "debug" | "info" | "warn" | "error"  : undefined
+        );
 
         res.status(200).json({"logs" : logs});
     }catch (err){
