@@ -87,26 +87,51 @@ export async function ingestLogs(
 // ------------------ get logs ----------------------------------------------------------
 
 
+function checkParse<T>(schema: z.ZodType<T>, value: unknown): T | null | undefined{
+    if (value === undefined) return undefined;
+    const result = schema.safeParse(value);
+
+    if (!result.success) {
+        return null;
+    }
+
+    return result.data;
+}
 
 export async function gLogs(req:Request,res:Response,next:NextFunction){
 
     try{
-        let {service, level} = req.query;
+        let {service, level, since, until} = req.query;
         const levelSchema = z.enum(["debug", "info", "warn", "error"]);
-        if (level !== undefined){
-            const result = levelSchema.safeParse(level);
-
-            if (!result.success){
-                return res.status(400).json({
-                    error:"Unsupported log level",
-                });
-            }
+        const validateLevel= checkParse(levelSchema,level);
+        if (validateLevel === null) {
+            return res.status(400).json({
+                "error": "Unsupported log level",
+            });
         }
+        
+        const dateSchema = z.string().datetime().transform((val)=>new Date(val));
+        const validateSince = checkParse(dateSchema,since);
+        const validateUntil = checkParse(dateSchema,until);
+        if (validateSince === null || validateUntil === null){
+            return res.status(400).json({
+                "error": "invalid since or until value",
+            });
+        }
+
+        if ((validateSince!==undefined && validateUntil !== undefined) && validateSince > validateUntil){
+            return res.status(400).json({
+                "error" : "until earlier than since"
+            })
+        }
+        
 
         const logs = await getLogs(
             100,
             typeof service === 'string' ? service : undefined,
-            typeof level === 'string'? level as "debug" | "info" | "warn" | "error"  : undefined
+            typeof level === 'string'? level as "debug" | "info" | "warn" | "error"  : undefined,
+            validateSince,
+            validateUntil
         );
 
         res.status(200).json({"logs" : logs});
