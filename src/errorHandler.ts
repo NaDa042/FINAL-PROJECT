@@ -17,8 +17,10 @@ export function errorHandler(
         res.status(403).json({"error": err.message});
     else if (err instanceof error404)
         res.status(404).json({"error": err.message});
-    else 
+    else if(err instanceof SyntaxError)
         res.status(400).json({"error" : err.message});
+    else 
+        res.status(500).json({"error":"Internal server error"});
 }
 
 export class error400 extends Error{

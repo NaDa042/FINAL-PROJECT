@@ -8,7 +8,7 @@ import postgres from "postgres";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { config } from "./config.js";
-import { ingestLogs } from "./logs.js";
+import { gLogs, ingestLogs } from "./logs.js";
 import { errorHandler } from "./errorHandler.js";
 
 
@@ -28,6 +28,7 @@ app.use(express.json()); // so the app accepts json requests
 
 //get 
 app.get("/health",health); // checks if the app is ready to accept requests
+app.get("/logs",gLogs);
 //end get
 
 

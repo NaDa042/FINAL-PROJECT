@@ -1,9 +1,11 @@
 
 
-import { Request,Response } from "express";
+import { NextFunction, Request,Response } from "express";
 import * as z from "zod";
 import { insertLogs } from "./db/query/addLog.js";
 import { newLog } from "./db/schema.js";
+import { getLogs } from "./db/query/getLgs.js";
+
 
 export async function ingestLogs(
     req:Request,
@@ -78,6 +80,24 @@ export async function ingestLogs(
         "rejected":rejected
     });
     
+}
 
+
+// ------------------ get logs ----------------------------------------------------------
+
+
+
+export async function gLogs(req:Request,res:Response,next:NextFunction){
+
+    try{
+        const parms = req.query.service;
+
+        const logs = await getLogs(100,typeof parms === 'string' ? parms : undefined);
+
+        res.status(200).json({"logs" : logs});
+    }catch (err){
+        next(err);
+    }
     
+
 }
