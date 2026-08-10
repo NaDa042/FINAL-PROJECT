@@ -14,7 +14,7 @@ export async function getLogs(
 
     const attrConditions = attr?
         Object.entries(attr).map(([key,value])=>
-        sql`${logs.attributes} @> ${JSON.stringify({[key]:value})}::jsonb`
+        sql`${logs.attributes}->>${key} = ${value}` // sql`${logs.attributes} @> ${JSON.stringify({[key]:value})}::jsonb`
     ):[];
 
     const ans = await db
