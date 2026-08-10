@@ -98,12 +98,29 @@ function checkParse<T>(schema: z.ZodType<T>, value: unknown): T | null | undefin
     return result.data;
 }
 
+function encodeCursor(timestamp:Date,id:string):string{
+
+    const strjson = JSON.stringify({timestamp:timestamp,id:id});
+    const result = Buffer.from(strjson).toString('base64');
+    return result;
+}
+function decodeCursor(cursor: string): { timestamp: Date, id: string } {
+    const strjson = Buffer.from(cursor,'base64').toString('utf-8');
+    const result =  JSON.parse(strjson);
+    const ans = {
+        timestamp : new Date(result.timestamp),
+        id : result.id
+    }
+    return ans;
+}
+
+
 export async function gLogs(req:Request,res:Response,next:NextFunction){
 
     try{
 
         // extract filters values from the request
-        let {service, level, since, until ,q,limit} = req.query;
+        let {service, level, since, until ,q,limit,cursor} = req.query;
 
 
         // handle level filter
@@ -131,7 +148,6 @@ export async function gLogs(req:Request,res:Response,next:NextFunction){
         }
 
         // handle attr.<key>
-        
     
         const attrRecord = Object.fromEntries(
         Object.entries(req.query)
@@ -156,19 +172,36 @@ export async function gLogs(req:Request,res:Response,next:NextFunction){
                 "error" : "Limit outside the supported range (1000)"
             });
         }
+        const resolvedLimit = validateLimit ?? 100;
 
+
+        // handle cursor
+        const cursorObj = cursor? decodeCursor(cursor as string) : undefined;
 
         const logs = await getLogs(
-            validateLimit,
+            resolvedLimit,
             typeof service === 'string' ? service : undefined,
             validateLevel,
             validateSince,
             validateUntil,
             attrRecord,
-            typeof q ==='string' ? q : undefined
+            typeof q ==='string' ? q : undefined,
+            (cursorObj !== undefined) ? cursorObj : undefined 
         );
 
-        res.status(200).json({"logs" : logs});
+
+        const hasNextPage = logs.length >resolvedLimit;
+        const returnedLogs = hasNextPage
+        ?logs.slice(0,resolvedLimit)
+        :logs;
+        const nextCursor = hasNextPage?
+        encodeCursor(
+            returnedLogs[returnedLogs.length-1].timestamp,
+            returnedLogs[returnedLogs.length-1].id,
+        ):null;
+        
+
+        res.status(200).json({"logs" : returnedLogs , "next_cursor" : nextCursor});
     }catch (err){
         next(err);
     }
