@@ -103,7 +103,7 @@ export async function gLogs(req:Request,res:Response,next:NextFunction){
     try{
 
         // extract filters values from the request
-        let {service, level, since, until} = req.query;
+        let {service, level, since, until ,q} = req.query;
 
 
         // handle level filter
@@ -140,7 +140,8 @@ export async function gLogs(req:Request,res:Response,next:NextFunction){
             key.slice(5),
             value
             ])
-        )as Record<string, string>;;
+        )as Record<string, string>;
+
 
 
         const logs = await getLogs(
@@ -149,7 +150,8 @@ export async function gLogs(req:Request,res:Response,next:NextFunction){
             typeof level === 'string'? level as "debug" | "info" | "warn" | "error"  : undefined,
             validateSince,
             validateUntil,
-            attrRecord
+            attrRecord,
+            typeof q ==='string' ? q : undefined
         );
 
         res.status(200).json({"logs" : logs});

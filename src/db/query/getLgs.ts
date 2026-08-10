@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, lt, sql } from "drizzle-orm";
 import { db } from "../index.js";
 import { logs } from "../schema.js";
 
@@ -8,7 +8,8 @@ export async function getLogs(
     level?: "debug" | "info" | "warn" | "error",
     since?: Date,
     until?: Date,
-    attr?: Record<string,string>
+    attr?: Record<string,string>,
+    q? : string
 ){
 
     const attrConditions = attr?
@@ -24,7 +25,8 @@ export async function getLogs(
         level?eq(logs.level,level):undefined,
         since? gte(logs.timestamp,since):undefined, // incluseve >=
         until? lt(logs.timestamp,until):undefined, // exclusive <
-        ...attrConditions
+        ...attrConditions,
+        q? ilike(logs.message,`%${q}%`) : undefined // ilike is case-insensitive
     ))
     .orderBy(desc(logs.timestamp),desc(logs.id))
     .limit(limit);
