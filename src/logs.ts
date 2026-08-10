@@ -103,7 +103,7 @@ export async function gLogs(req:Request,res:Response,next:NextFunction){
     try{
 
         // extract filters values from the request
-        let {service, level, since, until ,q} = req.query;
+        let {service, level, since, until ,q,limit} = req.query;
 
 
         // handle level filter
@@ -143,11 +143,25 @@ export async function gLogs(req:Request,res:Response,next:NextFunction){
         )as Record<string, string>;
 
 
+        // limit error-check
+        const limitSchema = z.coerce.number().int().positive(); // Convert the input to a number → make sure it's an integer → make sure it's positive.
+        const validateLimit = checkParse(limitSchema,limit);
+        if (validateLimit === null){
+            return res.status(400).json({
+                "error" : "Non-numeric limit"
+            });
+        }
+        if (validateLimit !== undefined && validateLimit > 1000){
+            return res.status(400).json({
+                "error" : "Limit outside the supported range (1000)"
+            });
+        }
+
 
         const logs = await getLogs(
-            100,
+            validateLimit,
             typeof service === 'string' ? service : undefined,
-            typeof level === 'string'? level as "debug" | "info" | "warn" | "error"  : undefined,
+            validateLevel,
             validateSince,
             validateUntil,
             attrRecord,
