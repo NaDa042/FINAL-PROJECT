@@ -101,7 +101,12 @@ function checkParse<T>(schema: z.ZodType<T>, value: unknown): T | null | undefin
 export async function gLogs(req:Request,res:Response,next:NextFunction){
 
     try{
+
+        // extract filters values from the request
         let {service, level, since, until} = req.query;
+
+
+        // handle level filter
         const levelSchema = z.enum(["debug", "info", "warn", "error"]);
         const validateLevel= checkParse(levelSchema,level);
         if (validateLevel === null) {
@@ -109,7 +114,8 @@ export async function gLogs(req:Request,res:Response,next:NextFunction){
                 "error": "Unsupported log level",
             });
         }
-        
+
+        // handle since and until filters
         const dateSchema = z.string().datetime().transform((val)=>new Date(val));
         const validateSince = checkParse(dateSchema,since);
         const validateUntil = checkParse(dateSchema,until);
@@ -118,20 +124,32 @@ export async function gLogs(req:Request,res:Response,next:NextFunction){
                 "error": "invalid since or until value",
             });
         }
-
         if ((validateSince!==undefined && validateUntil !== undefined) && validateSince > validateUntil){
             return res.status(400).json({
                 "error" : "until earlier than since"
             })
         }
+
+        // handle attr.<key>
         
+    
+        const attrRecord = Object.fromEntries(
+        Object.entries(req.query)
+            .filter(([key,value]) => key.startsWith("attr.") && typeof value === "string")
+            .map(([key, value]) => [
+            key.slice(5),
+            value
+            ])
+        )as Record<string, string>;;
+
 
         const logs = await getLogs(
             100,
             typeof service === 'string' ? service : undefined,
             typeof level === 'string'? level as "debug" | "info" | "warn" | "error"  : undefined,
             validateSince,
-            validateUntil
+            validateUntil,
+            attrRecord
         );
 
         res.status(200).json({"logs" : logs});
