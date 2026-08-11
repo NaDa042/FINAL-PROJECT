@@ -10,6 +10,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import { config } from "./config.js";
 import { gLogs, ingestLogs } from "./logs.js";
 import { errorHandler } from "./errorHandler.js";
+import { AggregateLogs } from "./aggregate.js";
 
 
 
@@ -29,6 +30,7 @@ app.use(express.json()); // so the app accepts json requests
 //get 
 app.get("/health",health); // checks if the app is ready to accept requests
 app.get("/logs",gLogs);
+app.get("/logs/aggregate",AggregateLogs);
 //end get
 
 

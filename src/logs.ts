@@ -87,7 +87,7 @@ export async function ingestLogs(
 // ------------------ get logs ----------------------------------------------------------
 
 
-function checkParse<T>(schema: z.ZodType<T>, value: unknown): T | null | undefined{
+export function checkParse<T>(schema: z.ZodType<T>, value: unknown): T | null | undefined{
     if (value === undefined) return undefined;
     const result = schema.safeParse(value);
 
