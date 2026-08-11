@@ -11,6 +11,7 @@ import { config } from "./config.js";
 import { gLogs, ingestLogs } from "./logs.js";
 import { errorHandler } from "./errorHandler.js";
 import { AggregateLogs } from "./aggregate.js";
+import { runRetention } from "./runRetention.js";
 
 
 
@@ -40,6 +41,16 @@ app.post("/logs",ingestLogs);
 
 
 app.use(errorHandler); //should be here after all the routes and other middlewares
+
+
+await runRetention(new Date(Date.now() - config.db.retentionDays * 24 * 60 * 60 * 1000),10000);
+
+
+setInterval(async()=>{
+  await runRetention(new Date(Date.now() - config.db.retentionDays * 24 * 60 * 60 * 1000),10000);
+}, 60 * 60 * 1000);
+
+
 
 app.listen(PORT, () => {
   console.log(`Server is running at http://localhost:${PORT}`);
