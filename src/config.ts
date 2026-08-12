@@ -1,4 +1,3 @@
-process.loadEnvFile();
 
 type APIConfig = {
   db: {
