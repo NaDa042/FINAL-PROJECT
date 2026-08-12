@@ -42,6 +42,9 @@ app.post("/logs",ingestLogs);
 
 app.use(errorHandler); //should be here after all the routes and other middlewares
 
+app.listen(PORT, () => {
+  console.log(`Server is running at http://localhost:${PORT}`);
+});
 
 await runRetention(new Date(Date.now() - config.db.retentionDays * 24 * 60 * 60 * 1000),10000);
 
@@ -52,6 +55,3 @@ setInterval(async()=>{
 
 
 
-app.listen(PORT, () => {
-  console.log(`Server is running at http://localhost:${PORT}`);
-});

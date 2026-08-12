@@ -4,6 +4,25 @@
 # we start everything together with a single "docker compose up".
 
 services:
+    db:
+      image: postgres:16
+      ports:
+        - "5432:5432"
+      environment:
+        POSTGRES_USER: "nada"
+        POSTGRES_PASSWORD : "devpassword"
+        POSTGRES_DB : "logs_db"
+      healthcheck:
+        test: ["CMD-SHELL", "pg_isready -U nada -d logs_db"]
+        interval: 5s
+        timeout: 5s
+        retries: 5
+      deploy:
+        resources:
+          limits:
+            cpus: "1.0"
+            memory: 1GB
+
     app:
       build: .
       ports: 
@@ -17,17 +36,8 @@ services:
           limits:
             cpus: "0.5"
             memory: 256M
+      depends_on:
+        db:
+          condition: service_healthy
+      
     
-    db:
-      image: postgres:16
-      ports:
-        - "5432:5432"
-      environment:
-        POSTGRES_USER: "nada"
-        POSTGRES_PASSWORD : "devpassword"
-        POSTGRES_DB : "logs_db"
-      deploy:
-        resources:
-          limits:
-            cpus: "1"
-            memory: 1GB
