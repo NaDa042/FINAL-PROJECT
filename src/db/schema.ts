@@ -18,6 +18,8 @@ export const logs = pgTable("logs",{
     attributesInx : index("attributes_ginIndex").using("gin",t.attributes),
 
     timestampIdIdx: index("timestamp_id_idx").on(t.timestamp.desc(), t.id.desc()),
+
+    serviceTimestampIdx: index("service_timestamp_id_idx").on(t.service, t.timestamp.desc(), t.id.desc()),
 }));
 
 export type newLog = typeof logs.$inferInsert;

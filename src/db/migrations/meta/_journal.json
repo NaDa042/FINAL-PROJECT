@@ -15,6 +15,13 @@
       "when": 1786624657938,
       "tag": "0001_harsh_boom_boom",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1786656110113,
+      "tag": "0002_deep_hawkeye",
+      "breakpoints": true
     }
   ]
 }

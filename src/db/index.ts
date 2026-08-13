@@ -11,7 +11,7 @@ if (!process.env.DATABASE_URL) {
   throw new Error("Database URL is not configured.");
 }
 
-export const conn = postgres(process.env.DATABASE_URL);
+export const conn = postgres(process.env.DATABASE_URL,{max:20});
 export const db = drizzle(conn, {schema});
 
 

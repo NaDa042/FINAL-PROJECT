@@ -8,6 +8,15 @@ import { getLogs } from "./db/query/getLgs.js";
 import { error400 } from "./errorHandler.js";
 
 
+// TEMPORARY — remove before final submission
+// let sumValidate = 0, sumDb = 0, sumTotal = 0, count = 0;
+// setInterval(() => {
+//   if (count > 0) {
+//     console.log(`[perf] validate=${(sumValidate/count).toFixed(2)}ms db=${(sumDb/count).toFixed(2)}ms total=${(sumTotal/count).toFixed(2)}ms  (n=${count})`);
+//   }
+//   sumValidate = sumDb = sumTotal = count = 0;
+// }, 5000);
+
 // -------------------------------------------------
 function normalizeAttributes(attrs?: Record<string, string | number | boolean>) {
   if (!attrs) return attrs;
@@ -50,6 +59,8 @@ export async function ingestLogs(
     req:Request,
     res:Response,
 ){
+
+    // const t0 = performance.now();
     
     // check if req.body is an object with a logs array 
     const body = batchSchema.safeParse(req.body);
@@ -85,12 +96,20 @@ export async function ingestLogs(
         return res.status(400).json({error : "all entries are invalid"});
     }
 
+    // const t1 = performance.now();
+    
     await insertLogs(arraccepted);
+    // const t2 = performance.now();
 
     res.status(200).json({
         "accepted":accepted,
         "rejected":rejected
     });
+
+    // sumValidate += (t1 - t0);
+    // sumDb += (t2 - t1);
+    // sumTotal += (t2 - t0);
+    // count++;
     
 }
 
@@ -215,5 +234,5 @@ export async function gLogs(req:Request,res:Response,next:NextFunction){
         next(err);
     }
     
-
+    
 }
