@@ -1,0 +1,36 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start stack
+        run: docker compose up -d --build
+
+      - name: Wait for health
+        run: |
+          for i in {1..30}; do
+            curl -sf http://localhost:8080/health && break
+            sleep 2
+          done
+
+      - name: Smoke test endpoints
+        run: |
+          curl -sf -X POST http://localhost:8080/logs \
+            -H "Content-Type: application/json" \
+            -d '{"logs":[{"timestamp":"2026-08-13T10:00:00Z","level":"info","service":"ci-test","message":"smoke test","attributes":{}}]}' \
+            | grep -q '"accepted"' || exit 1
+          
+          
+          curl -sf "http://localhost:8080/logs?service=ci-test&limit=10" | grep -q '"logs"' || exit 1
+
+          curl -sf "http://localhost:8080/logs/aggregate?since=2026-08-13T09:00:00Z&until=2026-08-13T11:00:00Z&bucket=1m" \
+            | grep -q '"buckets"' || exit 1
+
+      - name: Tear down
+        if: always()
+        run: docker compose down
