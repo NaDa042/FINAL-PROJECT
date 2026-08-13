@@ -8,41 +8,49 @@ import { getLogs } from "./db/query/getLgs.js";
 import { error400 } from "./errorHandler.js";
 
 
+// -------------------------------------------------
+function normalizeAttributes(attrs?: Record<string, string | number | boolean>) {
+  if (!attrs) return attrs;
+  return Object.fromEntries(Object.entries(attrs).map(([k, v]) => [k, String(v)]));
+}
+// --------------------------------------------
+
+const levelSchema = z.enum(["debug", "info", "warn", "error"]);
+const timestampSchema = z.string().datetime().refine(
+    (val) => {
+        const inputDate = new Date(val);
+        const maxDate = new Date(Date.now()+5*60*1000);
+        return inputDate <= maxDate;
+    },{
+        message:"Timestamp cannot be more than 5 minutes in the future",
+    }
+).transform((val) => new  Date(val));
+
+//a string --> .string() ,  checks valid ISO 8601 format -->  .datetime()
+const serviceMessageSchema = z.string().min(1); // must be non-empty
+
+const attributesSchema = z.record( // an object with arbitrary keys --> z.record(keyType, valueType)
+    z.string(), // keys are strings
+    z.union([z.string(),z.number(),z.boolean()]) // values are one of these
+).optional();
+
+const schema = z.object({
+    "timestamp" : timestampSchema,
+    "level":levelSchema,
+    "service":serviceMessageSchema,
+    "message":serviceMessageSchema,
+    "attributes": attributesSchema,
+});
+
+const batchSchema = z.object({
+    logs : z.array(z.any())// we dont what each entry check here we jush want to check the out struct so we used any() 
+});
+
 export async function ingestLogs(
     req:Request,
     res:Response,
 ){
-
-    const levelSchema = z.enum(["debug", "info", "warn", "error"]);
-    //a string --> .string() ,  checks valid ISO 8601 format -->  .datetime()
-    const timestampSchema = z.string().datetime().refine(
-        (val) => {
-            const inputDate = new Date(val);
-            const maxDate = new Date(Date.now()+5*60*1000);
-            return inputDate <= maxDate;
-        },{
-            message:"Timestamp cannot be more than 5 minutes in the future",
-        }
-    ).transform((val) => new  Date(val));
-    const serviceMessageSchema = z.string().min(1); // must be non-empty
-
-    const attributesSchema = z.record( // an object with arbitrary keys --> z.record(keyType, valueType)
-        z.string(), // keys are strings
-        z.union([z.string(),z.number(),z.boolean()]) // values are one of these
-    ).optional();
-
-    const schema = z.object({
-        "timestamp" : timestampSchema,
-        "level":levelSchema,
-        "service":serviceMessageSchema,
-        "message":serviceMessageSchema,
-        "attributes": attributesSchema,
-    });
-
-    const batchSchema = z.object({
-        logs : z.array(z.any())// we dont what each entry check here we jush want to check the out struct so we used any() 
-    });
-
+    
     // check if req.body is an object with a logs array 
     const body = batchSchema.safeParse(req.body);
     if (!body.success){
@@ -59,6 +67,9 @@ export async function ingestLogs(
         try{
             const val = schema.parse(logs[i]);
             accepted++;
+            // -------------------------------------------------------------------------------------------------------------------------------
+            val.attributes = normalizeAttributes(val.attributes);
+            // -------------------------------------------------------------------------------------------------------------------------------
             arraccepted.push(val);
         }catch(err){
             if (err instanceof z.ZodError){
@@ -114,6 +125,8 @@ function decodeCursor(cursor: string): { timestamp: Date, id: string } {
     return ans;
 }
 
+const dateSchema = z.string().datetime().transform((val)=>new Date(val));
+const limitSchema = z.coerce.number().int().positive(); // Convert the input to a number → make sure it's an integer → make sure it's positive.
 
 export async function gLogs(req:Request,res:Response,next:NextFunction){
 
@@ -122,9 +135,7 @@ export async function gLogs(req:Request,res:Response,next:NextFunction){
         // extract filters values from the request
         let {service, level, since, until ,q,limit,cursor} = req.query;
 
-
         // handle level filter
-        const levelSchema = z.enum(["debug", "info", "warn", "error"]);
         const validateLevel= checkParse(levelSchema,level);
         if (validateLevel === null) {
             return res.status(400).json({
@@ -133,7 +144,6 @@ export async function gLogs(req:Request,res:Response,next:NextFunction){
         }
 
         // handle since and until filters
-        const dateSchema = z.string().datetime().transform((val)=>new Date(val));
         const validateSince = checkParse(dateSchema,since);
         const validateUntil = checkParse(dateSchema,until);
         if (validateSince === null || validateUntil === null){
@@ -160,7 +170,6 @@ export async function gLogs(req:Request,res:Response,next:NextFunction){
 
 
         // limit error-check
-        const limitSchema = z.coerce.number().int().positive(); // Convert the input to a number → make sure it's an integer → make sure it's positive.
         const validateLimit = checkParse(limitSchema,limit);
         if (validateLimit === null){
             return res.status(400).json({

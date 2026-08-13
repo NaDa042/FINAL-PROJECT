@@ -13,12 +13,11 @@ export async function aggLogs(
   q?: string,
   group_by?: 'service' | 'level'
 ) {
-    // Build dynamic attribute conditions safely
     const attrConditions = attr
-        ? Object.entries(attr).map(([key, value]) =>
-            sql`${logs.attributes}->>${key} = ${value}`
+    ? Object.entries(attr).map(([key, value]) =>
+        sql`${logs.attributes} @> ${JSON.stringify({ [key]: value })}::jsonb`
         )
-        : [];
+    : [];
 
     const groupByCol =
         group_by === 'service'

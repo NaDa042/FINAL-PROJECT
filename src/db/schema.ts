@@ -13,9 +13,11 @@ export const logs = pgTable("logs",{
     service:text("service").notNull(),
     message:text("message").notNull(),
     attributes: jsonb("attributes")
-},(logs)=>({
+},(t)=>({
     // define the GIN index for the attributes
-    attributesInx : index("attributes_ginIndex").using("gin",logs.attributes),
+    attributesInx : index("attributes_ginIndex").using("gin",t.attributes),
+
+    timestampIdIdx: index("timestamp_id_idx").on(t.timestamp.desc(), t.id.desc()),
 }));
 
 export type newLog = typeof logs.$inferInsert;

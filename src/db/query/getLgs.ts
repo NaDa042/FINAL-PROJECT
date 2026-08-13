@@ -13,11 +13,11 @@ export async function getLogs(
     cursor? : {timestamp:Date,id:string}
 ){
 
-    const attrConditions = attr?
-        Object.entries(attr).map(([key,value])=>
-        sql`${logs.attributes}->>${key} = ${value}` // sql`${logs.attributes} @> ${JSON.stringify({[key]:value})}::jsonb`
-    ):[];
-
+    const attrConditions = attr
+    ? Object.entries(attr).map(([key, value]) =>
+        sql`${logs.attributes} @> ${JSON.stringify({ [key]: value })}::jsonb`
+        )
+    : [];
     const ans = await db
     .select()
     .from(logs)
