@@ -1,5 +1,5 @@
 import { and, eq, gte, ilike, lt, sql } from 'drizzle-orm';
-import { db } from '../index.js';
+import { readDb } from '../index.js';
 import { logs } from '../schema.js';
 
 
@@ -31,7 +31,7 @@ export async function aggLogs(
 
 
 
-    let query = db
+    let query = readDb
     .select({
         start:bucketTime,
         group: groupByCol??sql<null>`null`,

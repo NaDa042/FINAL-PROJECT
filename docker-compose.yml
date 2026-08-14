@@ -22,6 +22,10 @@ services:
         - "max_wal_size=2GB"
         - "-c"
         - "checkpoint_timeout=15min"
+        - "-c"
+        - "synchronous_commit=off"
+        - "-c"
+        - "wal_compression=on"
       ports:
         - "5432:5432"
       environment:

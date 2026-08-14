@@ -1,5 +1,5 @@
 import { and, desc, eq, gte, ilike, lt, or, sql } from "drizzle-orm";
-import { db } from "../index.js";
+import { readDb } from "../index.js";
 import { logs } from "../schema.js";
 
 export async function getLogs(
@@ -18,7 +18,7 @@ export async function getLogs(
         sql`${logs.attributes} @> ${JSON.stringify({ [key]: value })}::jsonb`
         )
     : [];
-    const ans = await db
+    const ans = await readDb
     .select()
     .from(logs)
     .where(and(

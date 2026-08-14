@@ -1,10 +1,11 @@
 
-import { conn, db } from "../index.js";
+import { writeConn,readConn, db } from "../index.js";
 import { logs } from "../schema.js";
 
 
 export async function checkConnection() {
-    await conn`SELECT 1`;
+    await writeConn`SELECT 1`;
+    await readConn`SELECT 1`;
 }
 
 export async function checkMigrations() {

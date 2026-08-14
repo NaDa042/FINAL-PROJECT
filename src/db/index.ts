@@ -11,12 +11,12 @@ if (!process.env.DATABASE_URL) {
   throw new Error("Database URL is not configured.");
 }
 
-export const conn = postgres(process.env.DATABASE_URL,
-  {
-    max : 30
-  }
-);
-export const db = drizzle(conn, {schema});
+export const writeConn = postgres(process.env.DATABASE_URL,{max:20});
+export const readConn = postgres(process.env.DATABASE_URL,{max:10});
+
+
+export const db = drizzle(writeConn, {schema}); // ingestion
+export const readDb = drizzle(readConn,{schema});// query + aggregate
 
 
 
