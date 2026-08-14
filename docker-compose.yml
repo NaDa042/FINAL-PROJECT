@@ -6,9 +6,26 @@
 services:
     db:
       image: postgres:16
-      cpus: "1.0"
-      mem_limit: 1g
-      command: postgres -c shared_buffers=256MB -c effective_cache_size=768MB -c work_mem=8MB -c max_wal_size=2GB -c checkpoint_timeout=1800 -c wal_compression=zstd -c synchronous_commit=off -c gin_pending_list_limit=256MB
+      command:
+        - "postgres"
+        - "-c"
+        - "shared_buffers=320MB"
+        - "-c"
+        - "effective_cache_size=700MB"
+        - "-c"
+        - "work_mem=32MB"
+        - "-c"
+        - "maintenance_work_mem=128MB"
+        - "-c"
+        - "max_parallel_workers_per_gather=0"
+        - "-c"
+        - "max_wal_size=2GB"
+        - "-c"
+        - "checkpoint_timeout=15min"
+        - "-c"
+        - "synchronous_commit=off"
+        - "-c"
+        - "wal_compression=on"
       ports:
         - "5432:5432"
       environment:
@@ -25,20 +42,25 @@ services:
           limits:
             cpus: "1.0"
             memory: 1GB
-        
+      
 
     app:
       build: .
       ports: 
         - "8080:8080"
-      cpus : "0.5"
-      mem_limit : 256m
       environment:
         DATABASE_URL : "postgres://nada:devpassword@db:5432/logs_db"
         RETENTION_DAYS : 30
+
+      deploy:
+        resources:
+          limits:
+            cpus: "0.5"
+            memory: 256M
       depends_on:
         db:
           condition: service_healthy
       
     
 
+    

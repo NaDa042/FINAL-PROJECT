@@ -22,7 +22,7 @@ export const logs = pgTable("logs",{
 
     serviceTimestampIdx: index("service_timestamp_id_idx").on(t.service, t.timestamp.desc(), t.id.desc(),t.level),
 
-        messageIndex: index("messageindex").using("gin", sql`message gin_trgm_ops`),
+    messageIndex: index("messageindex").using("gin", sql`message gin_trgm_ops`),
 }));
 
 export type newLog = typeof logs.$inferInsert;
