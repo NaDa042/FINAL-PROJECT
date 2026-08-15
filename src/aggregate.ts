@@ -5,6 +5,7 @@ import { NextFunction, Request,Response } from "express";
 import z from "zod";
 import { checkParse } from "./logs.js";
 import { aggLogs } from "./db/query/aggLogs.js";
+import { canServeFromRollup, queryRollup } from "./rollup.js";
 
 
 
@@ -83,7 +84,26 @@ export async function AggregateLogs(req:Request,res:Response,next:NextFunction){
                 "error" : "invlaid group_by value"
             })
         }
-        
+
+
+        const hasAttrFilter = Object.keys(attrRecord).length > 0;
+        const hasMessageFilter = typeof q == "string" && q.length > 0;
+
+        const RollupParams = {
+            since:validateSince,
+            until:validateUntil,
+            bucketSeconds: bucketSeconds[validateBucket],
+            service: typeof service == "string" ? service:undefined,
+            level: validateLevel,
+            hasAttrFilter,
+            hasMessageFilter,
+            groupBy: validategroupBy,
+        };
+
+        if (canServeFromRollup(RollupParams)){
+            return res.status(200).json({buckets:queryRollup(RollupParams)});
+        }
+             
 
         const agg = await aggLogs(            
             validateSince,

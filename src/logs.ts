@@ -3,24 +3,17 @@
 import { NextFunction, Request,Response } from "express";
 import * as z from "zod";
 import { insertLogs } from "./db/query/addLog.js";
-import { levelEnum, newLog } from "./db/schema.js";
+import {  newLog } from "./db/schema.js";
 import { getLogs } from "./db/query/getLgs.js";
-import { error400 } from "./errorHandler.js";
+import { recordIngested } from "./rollup.js";
 
-
-// TEMPORARY — remove before final submission
-// let sumValidate = 0, sumDb = 0, sumTotal = 0, count = 0;
-// setInterval(() => {
-//   if (count > 0) {
-//     console.log(`[perf] validate=${(sumValidate/count).toFixed(2)}ms db=${(sumDb/count).toFixed(2)}ms total=${(sumTotal/count).toFixed(2)}ms  (n=${count})`);
-//   }
-//   sumValidate = sumDb = sumTotal = count = 0;
-// }, 5000);
 
 // -------------------------------------------------
 function normalizeAttributes(attrs?: Record<string, string | number | boolean>) {
   if (!attrs) return attrs;
-  return Object.fromEntries(Object.entries(attrs).map(([k, v]) => [k, String(v)]));
+  const out: Record<string, string> = {};
+  for (const k in attrs) out[k] = String(attrs[k]);
+  return out;
 }
 // --------------------------------------------
 
@@ -60,7 +53,7 @@ export async function ingestLogs(
     res:Response,
 ){
 
-    // const t0 = performance.now();
+
     
     // check if req.body is an object with a logs array 
     const body = batchSchema.safeParse(req.body);
@@ -84,7 +77,6 @@ export async function ingestLogs(
             arraccepted.push(val);
         }catch(err){
             if (err instanceof z.ZodError){
-                console.log(`Entry ${i} is Invalid : ${err.message}`);
                 rejected.push({
                     index:i,
                     reason:err.issues.map((issue)=>issue.message).join(", ")
@@ -96,20 +88,24 @@ export async function ingestLogs(
         return res.status(400).json({error : "all entries are invalid"});
     }
 
-    // const t1 = performance.now();
-    
+
+
+
+
     await insertLogs(arraccepted);
-    // const t2 = performance.now();
+    recordIngested(arraccepted.map(l =>({
+        timestamp: l.timestamp as Date,
+        service: l.service,
+        level: l.level as "debug" | "info" | "warn" | "error",
+    })));
+
 
     res.status(200).json({
         "accepted":accepted,
         "rejected":rejected
     });
 
-    // sumValidate += (t1 - t0);
-    // sumDb += (t2 - t1);
-    // sumTotal += (t2 - t0);
-    // count++;
+
     
 }
 
