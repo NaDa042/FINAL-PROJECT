@@ -1,6 +1,6 @@
 ## Log Ingestion and Query Service
 
-A backend service for ingesting structured application logs and making them searchable — a simplified version of Datadog or Grafana Loki. It exposes endpoints to insert logs (`POST /logs`), query and filter them (`GET /logs`), and aggregate them into time-bucketed counts (`GET /logs/aggregate`), plus a health check (`GET /health`).
+A backend service for ingesting structured application logs and making them searchable.a simplified version of Datadog or Grafana Loki. It exposes endpoints to insert logs (`POST /logs`), query and filter them (`GET /logs`), and aggregate them into time-bucketed counts (`GET /logs/aggregate`), plus a health check (`GET /health`).
 
 ### Getting Started
 
