@@ -1,6 +1,6 @@
 ## Log Ingestion and Query Service
 
-A backend service for ingesting structured application logs and making them searchable.a simplified version of Datadog or Grafana Loki. It exposes endpoints to insert logs (`POST /logs`), query and filter them (`GET /logs`), and aggregate them into time-bucketed counts (`GET /logs/aggregate`), plus a health check (`GET /health`).
+A backend service for ingesting structured application logs and making them searchable — a simplified version of Datadog or Grafana Loki. It exposes endpoints to insert logs (`POST /logs`), query and filter them (`GET /logs`), and aggregate them into time-bucketed counts (`GET /logs/aggregate`), plus a health check (`GET /health`).
 
 ### Getting Started
 
@@ -147,11 +147,12 @@ A single `logs` table holds every log entry:
 | `message` | `TEXT` | |
 | `attributes` | `JSONB`, nullable | See "Attribute Storage Strategy" below for why JSONB was chosen |
 
-**Indexing:** three indexes support the query patterns the API actually needs.
+**Indexing:** four indexes support the query patterns the API actually needs.
 
 - **A `GIN` index on `attributes`.** Without it, filtering by `attr.<key>=value` would require scanning every row's attributes one at a time to check for a match — fine on a small table, but far too slow once the table holds a million-plus rows. The GIN index maintains a lookup structure mapping keys/values inside the JSONB column back to the rows that contain them, so a filtered query can jump straight to matching rows instead of scanning the whole table.
 - **A composite index on `(timestamp DESC, id DESC)`.** This matches the default sort order used by `GET /logs` on every request, with `id` as a tie-breaker for logs sharing the same timestamp. Without it, Postgres would need to sort the full matching result set on every query. With it, Postgres can walk the index in already-sorted order instead. This same index also serves the cursor pagination condition (`timestamp < X OR (timestamp = X AND id < Y)`) directly.
 - **A composite index on `(service, timestamp DESC, id DESC)`.** Covers the common case of filtering by `service` while also needing results in timestamp order — one index serves both the filter and the sort, instead of filtering with one index and then sorting separately.
+- **A composite index on `(level, timestamp DESC, id DESC)`.** Added after load testing showed `level`-filtered queries had no fast path and fell back to a full scan plus sort, the same problem the `service` index above solves.
 
 ### Attribute Storage Strategy
 
@@ -177,42 +178,45 @@ Deletion runs once when the service starts, and then again every hour for as lon
 
 ### Measured Performance Results
 
-**Test environment:** Docker containers with the spec's resource limits applied (app: 0.5 CPU / 256 MB, PostgreSQL: 1 CPU / 1 GB), tested both via the official load generator (`loadgen.foothilltech.net`) and a local consistency/throughput test script.
+**Test environment:** Docker containers with the spec's resource limits applied (app: 0.5 CPU / 256 MB, PostgreSQL: 1 CPU / 1 GB), tested both via the official load generator (`loadgen.foothilltech.net`) and local scripts (`consistency-test.mjs`, `logs-load-test.mjs`) that reproduce the same mix of concurrent ingestion, aggregation, and read-after-write traffic for faster iteration.
 
-**Initial result (official load generator, before optimization):**
+**Starting point (official load generator, before any optimization):**
 - Throughput: ~625 logs/sec (target: 15,000/sec)
-- Latency (p95): 14.9s – 32s across test stages (target: aggregate p95 under 1s)
-- Application CPU: 4–7% average
-- PostgreSQL CPU: 79–105% average, frequently maxed out
-- Correctness: 15/15 checks passed; Reliability: 20/20; zero errors, zero dropped requests
+- Latency p95: 14.9s – 32s across test stages
+- Application CPU: 4–7% average — PostgreSQL CPU: 79–105% average, frequently maxed out
+- Correctness: 15/15; Reliability: 20/20; zero errors, zero dropped requests
 
-The gap between low application CPU and high PostgreSQL CPU was the key signal: the application wasn't doing much work, while the database was maxed out — pointing to requests queuing rather than the system being genuinely compute-bound.
+Low application CPU next to maxed-out PostgreSQL CPU was the first real clue: the app wasn't doing much work, while the database was saturated — pointing at requests queuing somewhere, not at the system being genuinely out of compute.
 
-**Root cause:** the PostgreSQL client was created with no explicit connection pool size, defaulting to the driver's default of 10 simultaneous connections. Under concurrent load, most requests were queuing for one of those 10 connections instead of running in parallel.
+**Final result (official load generator, current submission):**
 
-**Optimizations applied:**
-- **Increased and split the connection pool.** Instead of one shared pool, ingestion (`POST /logs`) and reads (`GET /logs`, `GET /logs/aggregate`, health checks) now use separate connection pools (write pool: 20, read pool: 10), so a burst of writes can't starve out concurrent queries for connections.
-- **Added composite indexes** on `(timestamp DESC, id DESC)` and `(service, timestamp DESC, id DESC)`, matching the default sort/pagination order and the common service-filtered query pattern, avoiding on-the-fly sorts.
-- **Tuned PostgreSQL configuration** (`shared_buffers`, `effective_cache_size`, `work_mem`, `synchronous_commit=off`, WAL settings) within the container resource limits, set directly in `docker-compose.yml`.
+| Metric | Score |
+|---|---|
+| Overall | **66.69 / 100** (rank #10) |
+| Performance | 16.85 / 50 |
+| Reliability | 20 / 20 |
+| Correctness | 15 / 15 |
+| Queries | 14.84 / 15 |
 
-**Result after optimization (local test, ingestion concurrency 50–150, batch size 33):**
+Load scenario (15,000 logs/s offered for 120s): 166.7K logs accepted (~1,389 logs/sec sustained), zero rejected, zero errors. Ingestion p95 **1.12s** (down from double digits). Aggregate p95 **9ms** (down from 10–29 **seconds**). 75/75 correctness checks passed throughout.
 
-| Concurrency | Throughput | Ingest p95 | Aggregate p95 | Read-after-write |
-|---|---|---|---|---|
-| 50 | 2,467 logs/sec | 1,026ms | 1,026ms | 100% within 20s |
-| 100 | 2,869 logs/sec | 1,542ms | 1,608ms | 100% within 20s |
-| 150 | 3,117 logs/sec | 2,033ms | 2,033ms | 100% within 20s |
+**The optimization journey — each fix traced back to one of two root causes: not enough database connections for the concurrent demand, or the database's single CPU core being shared between reads and writes with no way to prioritize either.**
 
-Zero errors, zero rejected requests, and 100% of writes became queryable well within the 20-second consistency window across all runs.
+1. **Missing index on `timestamp`.** The very first fix — every query filters or sorts by timestamp, and there was no index for it, so every query was a full table scan. Added the `(timestamp DESC, id DESC)` composite index.
+2. **Connection pool exhaustion.** The Postgres client had no explicit pool size, defaulting to 10. Under concurrent load, most requests queued for one of those 10 connections instead of running in parallel — this explained the low-app-CPU / high-Postgres-CPU pattern above. Fixed by giving ingestion and reads separate, dedicated pools (write: 20, read: 10–20 depending on the run) so a burst of writes can never fully starve concurrent reads.
+3. **`synchronous_commit=off` and `wal_compression=on`.** Even after fixing the pool, ingestion was still spending real time waiting for each write to be flushed to disk before acknowledging it. Turning this off cut ingestion p95 by 80–96% across every test stage. Trade-off: a `200` response is durable against an application crash but not against an OS-level crash within the flush window — see Known Limitations.
+4. **In-memory rolling pre-aggregation cache for `GET /logs/aggregate`.** This was the single biggest win. Even with the pool and WAL fixes in place, `GET /logs/aggregate` still queued behind ingestion — both were competing for the same single Postgres CPU core, and giving ingestion more room to run just meant it consumed *more* of that shared core, squeezing aggregate harder. The fix removes Postgres from the hot path entirely for the common case: the app keeps a live in-process count of logs per `(second, service, level)` as they're ingested, and answers any `GET /logs/aggregate` request with no `attr.`/`q` filter and a recent window (last 3 hours) straight from memory — zero Postgres round-trips. Anything outside that (attribute filters, message search, older windows) falls through to the original Postgres query, unchanged. This is what took aggregate p95 from 10–29 seconds to single-digit milliseconds. See `src/rollup.ts`.
+5. **`GET /logs` still slows under heavy concurrent read load, especially for `attr.`/`level` filters with no time range.** Isolated (`EXPLAIN ANALYZE`, no concurrent load), an attribute-filtered query over 1M rows runs in ~270ms — not itself the problem. Under 20 concurrent readers with no ingestion running at all, the same query pattern degraded to a 12–25 second p50/p95. Same root cause as #2: with the rollup cache now handling most aggregate traffic, the read pool is used almost entirely by `GET /logs`, and 10 connections isn't enough headroom for sustained concurrent read traffic. Addressed by increasing the read pool further.
 
-**Where things currently stand:** throughput improved roughly 4–5x over the initial result, but still falls short of the 15,000 logs/sec target, and aggregate query p95 latency (1.0–2.0s) still exceeds the 1-second target. As concurrency increases, both latency figures grow and throughput gains diminish — a sign that a further bottleneck exists beyond connection pooling, not yet fully diagnosed at time of writing.
-
-**Bottlenecks discovered:** connection pool exhaustion (resolved); a secondary, not-yet-fully-identified bottleneck that emerges at higher concurrency (still under investigation).
+**Where things currently stand:** ingestion throughput improved roughly 2x over the initial official result and ingestion/aggregate latency both improved by one to three orders of magnitude, but sustained throughput still falls short of the 15,000 logs/sec target under the official load generator's full concurrency. Every bottleneck found so far has traced back to connection pool sizing or shared single-CPU contention between reads and writes — no query has been found that's inherently too slow to serve at the required scale.
 
 ### Known Limitations
 
-- Throughput does not yet reach the 15,000 logs/sec target under sustained load; connection pool exhaustion was identified and fixed, improving throughput roughly 4–5x, but a further bottleneck remains at higher concurrency and hasn't been fully diagnosed yet.
-- `GET /logs/aggregate` p95 latency (1.0–2.0s locally) still exceeds the 1-second target under load, though it stays close.
+- Throughput does not yet reach the 15,000 logs/sec target under sustained load. The official run sustains roughly 1,000–1,400 logs/sec — a real improvement over the initial ~625 logs/sec, but still well short of target. Every bottleneck identified so far (missing indexes, connection pool sizing, WAL flush waiting, single-CPU contention between reads and writes) has been diagnosed and addressed; the remaining gap has not been traced to any one further cause.
+- `GET /logs/aggregate` now meets its 1-second p95 target comfortably (measured 6–11ms on the official run) via the in-memory rollup cache described above. That cache only covers requests with no `attr.`/`q` filter and a window within the last 3 hours; anything outside that still queries Postgres directly and is subject to the same contention as `GET /logs` below.
+- `GET /logs` can slow significantly under sustained concurrent read load, particularly for `attr.`/`level`-filtered queries with no `since`/`until` range — the query itself is fast in isolation (~270ms at 1M rows), but throughput is limited by the read connection pool under concurrent demand. Requests that include a time range are unaffected, since they're bounded by the `(timestamp DESC, id DESC)` index regardless of filter.
+- The rolling aggregate cache lives in a single process's memory. This is correct for the current single-instance deployment; it would need to move to a shared store (e.g. Redis) if the application were ever scaled to multiple replicas.
+- `synchronous_commit=off` means an accepted (`200`) ingest request is durable against an application crash but not against an OS-level crash within the WAL flush window. This trades a small, well-understood durability window for a substantial (80–96%) reduction in ingestion latency.
 - Attribute values are normalized to strings at insert time, so a numeric or boolean value sent in (e.g. `"retries": 3`) is stored and returned as a string (`"retries": "3"`) rather than its original type. This trade-off enables correct, indexed `@>` filtering across all attribute value types, at the cost of not preserving the original JSON type on read.
 - No authentication, multi-tenancy, or rate limiting is implemented — the service is fully open by design, consistent with the required zero-configuration default.
 
