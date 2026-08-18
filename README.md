@@ -147,12 +147,11 @@ A single `logs` table holds every log entry:
 | `message` | `TEXT` | |
 | `attributes` | `JSONB`, nullable | See "Attribute Storage Strategy" below for why JSONB was chosen |
 
-**Indexing:** four indexes support the query patterns the API actually needs.
+**Indexing:** three indexes support the query patterns the API actually needs.
 
 - **A `GIN` index on `attributes`.** Without it, filtering by `attr.<key>=value` would require scanning every row's attributes one at a time to check for a match — fine on a small table, but far too slow once the table holds a million-plus rows. The GIN index maintains a lookup structure mapping keys/values inside the JSONB column back to the rows that contain them, so a filtered query can jump straight to matching rows instead of scanning the whole table.
 - **A composite index on `(timestamp DESC, id DESC)`.** This matches the default sort order used by `GET /logs` on every request, with `id` as a tie-breaker for logs sharing the same timestamp. Without it, Postgres would need to sort the full matching result set on every query. With it, Postgres can walk the index in already-sorted order instead. This same index also serves the cursor pagination condition (`timestamp < X OR (timestamp = X AND id < Y)`) directly.
 - **A composite index on `(service, timestamp DESC, id DESC)`.** Covers the common case of filtering by `service` while also needing results in timestamp order — one index serves both the filter and the sort, instead of filtering with one index and then sorting separately.
-- **A composite index on `(level, timestamp DESC, id DESC)`.** Added after load testing showed `level`-filtered queries had no fast path and fell back to a full scan plus sort, the same problem the `service` index above solves.
 
 ### Attribute Storage Strategy
 

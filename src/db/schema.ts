@@ -1,7 +1,6 @@
 
 
 
-import { sql } from "drizzle-orm";
 import { pgTable,index, uuid,text,timestamp, pgEnum, jsonb } from "drizzle-orm/pg-core";
 
 export const levelEnum = pgEnum("level",["debug","info","warn","error"]);

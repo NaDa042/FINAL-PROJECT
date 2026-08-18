@@ -12,10 +12,6 @@
 // in-memory structure: zero Postgres round trips, so it's immune to
 // write-path contention.
 //
-// Anything this structure doesn't cover (attr.<key> filters, q filters, or
-// a `since` older than RETAIN_MINUTES) falls back to the normal Postgres
-// query path unchanged -- this cache only ever accelerates, never changes,
-// what the API returns.
 //
 // Single-process assumption: this is correct as long as one app instance
 // handles all ingestion and all queries (true for this deployment's 0.5
@@ -27,11 +23,6 @@ type Level = "debug" | "info" | "warn" | "error";
 
 const RETAIN_MINUTES = 180; // how far back the cache stays valid; tune to container memory budget
 
-// secondEpoch -> "service|level" -> count
-// (second granularity, not minute -- since/until from real requests are
-// rarely minute-aligned, e.g. until=now() has sub-second precision. Storing
-// by minute would silently include/exclude up to 59s of data at the window
-// edges. Second granularity shrinks that error to <1s.)
 const buckets = new Map<number, Map<string, number>>();
 
 function secondEpoch(d: Date): number {
